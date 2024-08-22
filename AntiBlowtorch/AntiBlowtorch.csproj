@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net48</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>disable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <RootNamespace>RestoreMonarchy.AntiBlowtorch</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="RestoreMonarchy.RocketRedist" Version="3.24.4" />
+      <PackageReference Include="RestoreMonarchy.UnturnedRedist" Version="3.24.4" />
+    </ItemGroup>
+
+</Project>
