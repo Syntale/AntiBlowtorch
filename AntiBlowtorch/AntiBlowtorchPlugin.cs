@@ -53,11 +53,16 @@ public class AntiBlowtorchPlugin : RocketPlugin
     public override TranslationList DefaultTranslations => new()
     {
         { "BlockBlowtorch", "You cannot use blowtorch to repair this {0}, because it was recently damaged. You can repair it in {1} seconds." },
-        { "BlockSalvage", "You cannot salvage this {0},  because it was recently damaged. You can salvage it in {1} seconds." }
+        { "BlockSalvage", "You cannot salvage this {0}, because it was recently damaged. You can salvage it in {1} seconds." }
     };
 
     private void OnSalvageRequest(StructureDrop structure, SteamPlayer instigatorClient, ref bool shouldAllow)
     {
+        if (!shouldAllow)
+        {
+            return;
+        }
+
         int instanceId = structure.model.GetInstanceID();
         DateTime now = DateTime.UtcNow;
 
@@ -72,7 +77,7 @@ public class AntiBlowtorchPlugin : RocketPlugin
             PlayerMessages playerMessage = PlayerMessages.FirstOrDefault(pm => pm.PlayerID == player.CSteamID);
             if (playerMessage == null || (now - playerMessage.LastMessageTime).TotalSeconds > 10)
             {
-                string message = Translate("BlockSalvage", );
+                string message = Translate("BlockSalvage");
                 UnturnedChat.Say(player, $"You cannot salvage this structure as it was recently damaged. You can salvage it in {remainingTime:F0} seconds.");
                 if (playerMessage == null)
                 {
