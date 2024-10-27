@@ -10,7 +10,7 @@ using Logger = Rocket.Core.Logging.Logger;
 
 namespace RestoreMonarchy.AntiBlowtorch;
 
-public class AntiBlowtorchPlugin : RocketPlugin
+public class AntiBlowtorchPlugin : RocketPlugin<AntiBlowtorchConfiguration>
 {
     public static AntiBlowtorchPlugin Instance { get; private set; }
     public static List<DamagedStructures> DamagedStructures = new List<DamagedStructures>();
@@ -25,8 +25,8 @@ public class AntiBlowtorchPlugin : RocketPlugin
         BarricadeManager.OnRepairRequested += OnRepairRequest;
         StructureDrop.OnSalvageRequested_Global += OnSalvageRequest;
 
-        InvokeRepeating(nameof(ClearDamagedStructures), 0, 60);
-        InvokeRepeating(nameof(ClearPlayerMessages), 0, 10);
+        InvokeRepeating(nameof(ClearDamagedStructures), 0, Configuration.Instance.DamageClearTime * 60);
+        InvokeRepeating(nameof(ClearPlayerMessages), 0, Configuration.Instance.MessageClearTime);
 
         Logger.Log($"{Name} {Assembly.GetName().Version.ToString(3)} has been loaded!", ConsoleColor.Yellow);
         Logger.Log("Check out more Unturned plugins at restoremonarchy.com");
@@ -68,14 +68,14 @@ public class AntiBlowtorchPlugin : RocketPlugin
 
         DamagedStructures damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.InstanceID == instanceId);
 
-        if (damagedStructure != null && (now - damagedStructure.LastDamageTime).TotalMinutes <= 5)
+        if (damagedStructure != null && (now - damagedStructure.LastDamageTime).TotalSeconds <= Configuration.Instance.BlockTime)
         {
             shouldAllow = false;
             UnturnedPlayer player = UnturnedPlayer.FromSteamPlayer(instigatorClient);
-            double remainingTime = (damagedStructure.LastDamageTime.AddMinutes(5) - now).TotalSeconds;
+            double remainingTime = (damagedStructure.LastDamageTime.AddSeconds(Configuration.Instance.BlockTime) - now).TotalSeconds;
 
             PlayerMessages playerMessage = PlayerMessages.FirstOrDefault(pm => pm.PlayerID == player.CSteamID);
-            if (playerMessage == null || (now - playerMessage.LastMessageTime).TotalSeconds > 10)
+            if (playerMessage == null || (now - playerMessage.LastMessageTime).TotalSeconds > Configuration.Instance.MessageClearTime)
             {
                 string message = Translate("BlockSalvage");
                 UnturnedChat.Say(player, $"You cannot salvage this structure as it was recently damaged. You can salvage it in {remainingTime:F0} seconds.");
@@ -94,26 +94,23 @@ public class AntiBlowtorchPlugin : RocketPlugin
     private void OnRepairRequest(CSteamID instigatorsteamid, Transform structuretransform, ref float pendingtotalhealing, ref bool shouldallow)
     {
         int instanceid = structuretransform.GetInstanceID();
-        Logger.LogWarning($"{instanceid} - Inside RepairRequest");
         DateTime now = DateTime.UtcNow;
-        
-        
+
         DamagedStructures damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.InstanceID == instanceid);
 
-        if (damagedStructure != null && (now - damagedStructure.LastDamageTime).TotalMinutes <= 5)
+        if (damagedStructure != null && (now - damagedStructure.LastDamageTime).TotalSeconds <= Configuration.Instance.BlockTime)
         {
             shouldallow = false;
             pendingtotalhealing = 0;
             UnturnedPlayer player = UnturnedPlayer.FromCSteamID(instigatorsteamid);
-            double remainingTime = (damagedStructure.LastDamageTime.AddMinutes(5) - now).TotalSeconds;
-
+            double remainingTime = (damagedStructure.LastDamageTime.AddSeconds(Configuration.Instance.BlockTime) - now).TotalSeconds;
 
             PlayerMessages playerMessage = PlayerMessages.FirstOrDefault(pm => pm.PlayerID == instigatorsteamid);
-            if (playerMessage != null && (now - playerMessage.LastMessageTime).TotalSeconds <= 10)
+            if (playerMessage != null && (now - playerMessage.LastMessageTime).TotalSeconds <= Configuration.Instance.MessageClearTime)
             {
                 return;
             }
-            
+
             UnturnedChat.Say(player, $"You cannot use the blowtorch on this structure as it was recently damaged. You can heal it in {remainingTime:F0} seconds.");
             if (playerMessage == null)
             {
@@ -125,15 +122,15 @@ public class AntiBlowtorchPlugin : RocketPlugin
             }
         }
     }
-    
+
     private void ClearDamagedStructures()
     {
-        DamagedStructures.RemoveAll(ds => (DateTime.UtcNow - ds.LastDamageTime).TotalMinutes > 5);
+        DamagedStructures.RemoveAll(ds => (DateTime.UtcNow - ds.LastDamageTime).TotalSeconds > Configuration.Instance.BlockTime);
     }
-    
+
     private void ClearPlayerMessages()
     {
-        PlayerMessages.RemoveAll(pm => (DateTime.UtcNow - pm.LastMessageTime).TotalSeconds > 10);
+        PlayerMessages.RemoveAll(pm => (DateTime.UtcNow - pm.LastMessageTime).TotalSeconds > Configuration.Instance.MessageClearTime);
     }
 
     private void OnStructureDamaged(CSteamID instigatorsteamid, Transform transform, ref ushort pendingtotaldamage, ref bool shouldallow, EDamageOrigin damageorigin)
