@@ -1,8 +1,9 @@
 ﻿using Steamworks;
+using System;
 
 namespace RestoreMonarchy.AntiBlowtorch.Models;
 
-public class PlayerMessages
+public class PlayerMessage
 {
     public CSteamID PlayerID { get; set; }
     public DateTime LastMessageTime { get; set; }

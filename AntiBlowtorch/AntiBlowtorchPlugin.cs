@@ -1,10 +1,14 @@
 ﻿using RestoreMonarchy.AntiBlowtorch.Models;
+using Rocket.API;
 using Rocket.API.Collections;
 using Rocket.Core.Plugins;
 using Rocket.Unturned.Chat;
 using Rocket.Unturned.Player;
 using SDG.Unturned;
 using Steamworks;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using Logger = Rocket.Core.Logging.Logger;
 
@@ -13,20 +17,25 @@ namespace RestoreMonarchy.AntiBlowtorch;
 public class AntiBlowtorchPlugin : RocketPlugin<AntiBlowtorchConfiguration>
 {
     public static AntiBlowtorchPlugin Instance { get; private set; }
-    public static List<DamagedStructures> DamagedStructures = new List<DamagedStructures>();
-    public static List<PlayerMessages> PlayerMessages = new List<PlayerMessages>();
+    public Color MessageColor { get; set; }
+
+    public static List<DamagedStructure> DamagedStructures = [];
+    public static List<PlayerMessage> PlayerMessages = [];
 
     protected override void Load()
     {
         Instance = this;
-        StructureManager.onDamageStructureRequested += OnStructureDamaged;
-        StructureManager.OnRepairRequested += OnRepairRequest;
-        BarricadeManager.onDamageBarricadeRequested += OnStructureDamaged;
-        BarricadeManager.OnRepairRequested += OnRepairRequest;
-        StructureDrop.OnSalvageRequested_Global += OnSalvageRequest;
+        MessageColor = UnturnedChat.GetColorFromName(Configuration.Instance.MessageColor, Color.green);
 
-        InvokeRepeating(nameof(ClearDamagedStructures), 0, Configuration.Instance.DamageClearTime * 60);
-        InvokeRepeating(nameof(ClearPlayerMessages), 0, Configuration.Instance.MessageClearTime);
+        StructureManager.onDamageStructureRequested += OnStructureDamaged;
+        BarricadeManager.onDamageBarricadeRequested += OnBarricadeDamaged;
+        StructureManager.OnRepairRequested += OnRepairRequest;
+        BarricadeManager.OnRepairRequested += OnRepairRequest;
+        StructureDrop.OnSalvageRequested_Global += OnSalvageStructureRequest;
+        BarricadeDrop.OnSalvageRequested_Global += OnSalvageBarricadeRequest;
+
+        InvokeRepeating(nameof(ClearDamagedStructures), 300, 300);
+        InvokeRepeating(nameof(ClearPlayerMessages), 300, 300);
 
         Logger.Log($"{Name} {Assembly.GetName().Version.ToString(3)} has been loaded!", ConsoleColor.Yellow);
         Logger.Log("Check out more Unturned plugins at restoremonarchy.com");
@@ -35,10 +44,11 @@ public class AntiBlowtorchPlugin : RocketPlugin<AntiBlowtorchConfiguration>
     protected override void Unload()
     {
         StructureManager.onDamageStructureRequested -= OnStructureDamaged;
+        BarricadeManager.onDamageBarricadeRequested -= OnBarricadeDamaged;
         StructureManager.OnRepairRequested -= OnRepairRequest;
-        BarricadeManager.onDamageBarricadeRequested -= OnStructureDamaged;
         BarricadeManager.OnRepairRequested -= OnRepairRequest;
-        StructureDrop.OnSalvageRequested_Global -= OnSalvageRequest;
+        StructureDrop.OnSalvageRequested_Global -= OnSalvageStructureRequest;
+        BarricadeDrop.OnSalvageRequested_Global -= OnSalvageBarricadeRequest;
 
         DamagedStructures.Clear();
         PlayerMessages.Clear();
@@ -52,11 +62,38 @@ public class AntiBlowtorchPlugin : RocketPlugin<AntiBlowtorchConfiguration>
 
     public override TranslationList DefaultTranslations => new()
     {
-        { "BlockBlowtorch", "You cannot use blowtorch to repair this {0}, because it was recently damaged. You can repair it in {1} seconds." },
-        { "BlockSalvage", "You cannot salvage this {0}, because it was recently damaged. You can salvage it in {1} seconds." }
+        { "BlockRepair", "You can't repair this [[b]]{0}[[/b]], because it was recently damaged. Wait [[b]]{1}[[/b]] seconds." },
+        { "BlockSalvage", "You can't salvage this [[b]]{0}[[/b]], because it was recently damaged. Wait [[b]]{1}[[/b]] seconds." }
     };
 
-    private void OnSalvageRequest(StructureDrop structure, SteamPlayer instigatorClient, ref bool shouldAllow)
+    private void OnSalvageBarricadeRequest(BarricadeDrop barricade, SteamPlayer instigatorClient, ref bool shouldAllow)
+    {
+        if (!shouldAllow)
+        {
+            return;
+        }
+
+        int instanceId = barricade.model.GetInstanceID();
+        DateTime now = DateTime.UtcNow;
+
+        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.InstanceID == instanceId);
+        if (damagedStructure == null)
+        {
+            return;
+        }
+
+        if ((now - damagedStructure.LastDamageTime).TotalSeconds <= Configuration.Instance.BlockTimeSeconds)
+        {
+            shouldAllow = false;
+            UnturnedPlayer player = UnturnedPlayer.FromSteamPlayer(instigatorClient);
+            double remainingTime = (damagedStructure.LastDamageTime.AddSeconds(Configuration.Instance.BlockTimeSeconds) - now).TotalSeconds;
+            string structureName = barricade.asset.itemName;
+            string remainingTimeString = remainingTime.ToString("F0");
+            SendMessageToPlayer(player, "BlockSalvage", structureName, remainingTimeString);
+        }
+    }
+
+    private void OnSalvageStructureRequest(StructureDrop structure, SteamPlayer instigatorClient, ref bool shouldAllow)
     {
         if (!shouldAllow)
         {
@@ -66,55 +103,63 @@ public class AntiBlowtorchPlugin : RocketPlugin<AntiBlowtorchConfiguration>
         int instanceId = structure.model.GetInstanceID();
         DateTime now = DateTime.UtcNow;
 
-        DamagedStructures damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.InstanceID == instanceId);
+        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.InstanceID == instanceId);
+        if (damagedStructure == null)
+        {
+            return;
+        }
 
-        if (damagedStructure != null && (now - damagedStructure.LastDamageTime).TotalSeconds <= Configuration.Instance.BlockTime)
+        if ((now - damagedStructure.LastDamageTime).TotalSeconds <= Configuration.Instance.BlockTimeSeconds)
         {
             shouldAllow = false;
             UnturnedPlayer player = UnturnedPlayer.FromSteamPlayer(instigatorClient);
-            double remainingTime = (damagedStructure.LastDamageTime.AddSeconds(Configuration.Instance.BlockTime) - now).TotalSeconds;
-
-            PlayerMessages playerMessage = PlayerMessages.FirstOrDefault(pm => pm.PlayerID == player.CSteamID);
-            if (playerMessage == null || (now - playerMessage.LastMessageTime).TotalSeconds > Configuration.Instance.MessageClearTime)
-            {
-                string message = Translate("BlockSalvage");
-                UnturnedChat.Say(player, $"You cannot salvage this structure as it was recently damaged. You can salvage it in {remainingTime:F0} seconds.");
-                if (playerMessage == null)
-                {
-                    PlayerMessages.Add(new PlayerMessages { PlayerID = player.CSteamID, LastMessageTime = now });
-                }
-                else
-                {
-                    playerMessage.LastMessageTime = now;
-                }
-            }
+            double remainingTime = (damagedStructure.LastDamageTime.AddSeconds(Configuration.Instance.BlockTimeSeconds) - now).TotalSeconds;
+            string structureName = structure.asset.itemName;
+            string remainingTimeString = remainingTime.ToString("F0");
+            SendMessageToPlayer(player, "BlockSalvage", structureName, remainingTimeString);
         }
     }
 
-    private void OnRepairRequest(CSteamID instigatorsteamid, Transform structuretransform, ref float pendingtotalhealing, ref bool shouldallow)
+    private void OnRepairRequest(CSteamID instigatorsteamid, Transform transform, ref float pendingTotalHealing, ref bool shouldAllow)
     {
-        int instanceid = structuretransform.GetInstanceID();
+        if (!shouldAllow)
+        {
+            return;
+        }
+
+        int instanceId = transform.GetInstanceID();
         DateTime now = DateTime.UtcNow;
 
-        DamagedStructures damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.InstanceID == instanceid);
+        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.InstanceID == instanceId);
 
-        if (damagedStructure != null && (now - damagedStructure.LastDamageTime).TotalSeconds <= Configuration.Instance.BlockTime)
+        if (damagedStructure != null && (now - damagedStructure.LastDamageTime).TotalSeconds <= Configuration.Instance.BlockTimeSeconds)
         {
-            shouldallow = false;
-            pendingtotalhealing = 0;
+            shouldAllow = false;
             UnturnedPlayer player = UnturnedPlayer.FromCSteamID(instigatorsteamid);
-            double remainingTime = (damagedStructure.LastDamageTime.AddSeconds(Configuration.Instance.BlockTime) - now).TotalSeconds;
+            double remainingTime = (damagedStructure.LastDamageTime.AddSeconds(Configuration.Instance.BlockTimeSeconds) - now).TotalSeconds;
 
-            PlayerMessages playerMessage = PlayerMessages.FirstOrDefault(pm => pm.PlayerID == instigatorsteamid);
-            if (playerMessage != null && (now - playerMessage.LastMessageTime).TotalSeconds <= Configuration.Instance.MessageClearTime)
+            PlayerMessage playerMessage = PlayerMessages.FirstOrDefault(pm => pm.PlayerID == instigatorsteamid);
+            if (playerMessage != null && (now - playerMessage.LastMessageTime).TotalSeconds <= Configuration.Instance.MessageThrottleTimeSeconds)
             {
                 return;
             }
 
-            UnturnedChat.Say(player, $"You cannot use the blowtorch on this structure as it was recently damaged. You can heal it in {remainingTime:F0} seconds.");
+            string structureName = transform.name;
+            if (ushort.TryParse(structureName, out ushort structureId))
+            {
+                Asset asset = Assets.find(EAssetType.ITEM, structureId);
+                if (asset != null)
+                {
+                    structureName = asset.FriendlyName;
+                }
+            }
+            
+            string remainingTimeString = remainingTime.ToString("F0");
+            SendMessageToPlayer(player, "BlockRepair", structureName, remainingTimeString);
+
             if (playerMessage == null)
             {
-                PlayerMessages.Add(new PlayerMessages { PlayerID = instigatorsteamid, LastMessageTime = now });
+                PlayerMessages.Add(new PlayerMessage { PlayerID = instigatorsteamid, LastMessageTime = now });
             }
             else
             {
@@ -125,21 +170,96 @@ public class AntiBlowtorchPlugin : RocketPlugin<AntiBlowtorchConfiguration>
 
     private void ClearDamagedStructures()
     {
-        DamagedStructures.RemoveAll(ds => (DateTime.UtcNow - ds.LastDamageTime).TotalSeconds > Configuration.Instance.BlockTime);
+        DamagedStructures.RemoveAll(ds => (DateTime.UtcNow - ds.LastDamageTime).TotalSeconds > Configuration.Instance.BlockTimeSeconds);
     }
 
     private void ClearPlayerMessages()
     {
-        PlayerMessages.RemoveAll(pm => (DateTime.UtcNow - pm.LastMessageTime).TotalSeconds > Configuration.Instance.MessageClearTime);
+        PlayerMessages.RemoveAll(pm => (DateTime.UtcNow - pm.LastMessageTime).TotalSeconds > Configuration.Instance.MessageThrottleTimeSeconds);
     }
 
-    private void OnStructureDamaged(CSteamID instigatorsteamid, Transform transform, ref ushort pendingtotaldamage, ref bool shouldallow, EDamageOrigin damageorigin)
+    private void OnStructureDamaged(CSteamID instigatorSteamId, Transform structureTransform, ref ushort pendingtotaldamage, ref bool shouldallow, EDamageOrigin damageorigin)
+    {
+        if (Configuration.Instance.IgnoreOwnerAndGroup)
+        {
+            StructureDrop drop = StructureManager.FindStructureByRootTransform(structureTransform);
+            Player player = PlayerTool.getPlayer(instigatorSteamId);
+            if (drop == null || player == null)
+            {
+                return;
+            }
+            StructureData structureData = drop.GetServersideData();
+            if (instigatorSteamId.m_SteamID == structureData.owner)
+            {
+                return;
+            }
+            if (player.channel.owner.playerID.group.m_SteamID == structureData.group)
+            {
+                return;
+            }
+        }
+
+        RegisterDamagedStructure(structureTransform);
+    }
+
+    private void OnBarricadeDamaged(CSteamID instigatorSteamID, Transform barricadeTransform, ref ushort pendingTotalDamage, ref bool shouldAllow, EDamageOrigin damageOrigin)
+    {
+        if (Configuration.Instance.IgnoreOwnerAndGroup)
+        {
+            BarricadeDrop drop = BarricadeManager.FindBarricadeByRootTransform(barricadeTransform);
+            Player player = PlayerTool.getPlayer(instigatorSteamID);
+            if (drop == null || player == null)
+            {
+                return;
+            }
+
+            BarricadeData barricadeData = drop.GetServersideData();
+            if (instigatorSteamID.m_SteamID == barricadeData.owner)
+            {
+                return;
+            }
+
+            if (player.channel.owner.playerID.group.m_SteamID == barricadeData.group)
+            {
+                return;
+            }
+        }        
+
+        RegisterDamagedStructure(barricadeTransform);
+    }
+
+    private void RegisterDamagedStructure(Transform transform)
     {
         int instanceid = transform.GetInstanceID();
-        DamagedStructures.Add(new DamagedStructures
+        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.InstanceID == instanceid);
+        if (damagedStructure != null)
         {
-            InstanceID = instanceid,
-            LastDamageTime = DateTime.UtcNow
-        });
+            damagedStructure.LastDamageTime = DateTime.UtcNow;
+        }
+        else
+        {
+            DamagedStructures.Add(new DamagedStructure
+            {
+                InstanceID = instanceid,
+                LastDamageTime = DateTime.UtcNow
+            });
+        }
+    }
+
+    internal void SendMessageToPlayer(IRocketPlayer player, string translationKey, params object[] placeholder)
+    {
+        string msg = Translate(translationKey, placeholder);
+        msg = msg.Replace("[[", "<").Replace("]]", ">");
+        if (player is ConsolePlayer)
+        {
+            Logger.Log(msg);
+            return;
+        }
+
+        UnturnedPlayer unturnedPlayer = (UnturnedPlayer)player;
+        if (unturnedPlayer != null)
+        {
+            ChatManager.serverSendMessage(msg, MessageColor, null, unturnedPlayer.SteamPlayer(), EChatMode.SAY, Configuration.Instance.MessageIconUrl, true);
+        }
     }
 }

@@ -2,8 +2,6 @@
 
     <PropertyGroup>
         <TargetFramework>net48</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>disable</Nullable>
         <LangVersion>latest</LangVersion>
         <RootNamespace>RestoreMonarchy.AntiBlowtorch</RootNamespace>
     </PropertyGroup>
