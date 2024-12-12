@@ -76,7 +76,7 @@ public class AntiBlowtorchPlugin : RocketPlugin<AntiBlowtorchConfiguration>
         int instanceId = barricade.model.GetInstanceID();
         DateTime now = DateTime.UtcNow;
 
-        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.InstanceID == instanceId);
+        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.Transform == transform);
         if (damagedStructure == null)
         {
             return;
@@ -103,7 +103,7 @@ public class AntiBlowtorchPlugin : RocketPlugin<AntiBlowtorchConfiguration>
         int instanceId = structure.model.GetInstanceID();
         DateTime now = DateTime.UtcNow;
 
-        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.InstanceID == instanceId);
+        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.Transform == transform);
         if (damagedStructure == null)
         {
             return;
@@ -130,7 +130,7 @@ public class AntiBlowtorchPlugin : RocketPlugin<AntiBlowtorchConfiguration>
         int instanceId = transform.GetInstanceID();
         DateTime now = DateTime.UtcNow;
 
-        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.InstanceID == instanceId);
+        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.Transform == transform);
 
         if (damagedStructure != null && (now - damagedStructure.LastDamageTime).TotalSeconds <= Configuration.Instance.BlockTimeSeconds)
         {
@@ -230,8 +230,7 @@ public class AntiBlowtorchPlugin : RocketPlugin<AntiBlowtorchConfiguration>
 
     private void RegisterDamagedStructure(Transform transform)
     {
-        int instanceid = transform.GetInstanceID();
-        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.InstanceID == instanceid);
+        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.Transform == transform);
         if (damagedStructure != null)
         {
             damagedStructure.LastDamageTime = DateTime.UtcNow;
@@ -240,7 +239,7 @@ public class AntiBlowtorchPlugin : RocketPlugin<AntiBlowtorchConfiguration>
         {
             DamagedStructures.Add(new DamagedStructure
             {
-                InstanceID = instanceid,
+                Transform = transform,
                 LastDamageTime = DateTime.UtcNow
             });
         }
