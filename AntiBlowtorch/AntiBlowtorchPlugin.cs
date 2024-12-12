@@ -73,10 +73,9 @@ public class AntiBlowtorchPlugin : RocketPlugin<AntiBlowtorchConfiguration>
             return;
         }
 
-        int instanceId = barricade.model.GetInstanceID();
         DateTime now = DateTime.UtcNow;
 
-        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.Transform == transform);
+        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.Transform == barricade.model);
         if (damagedStructure == null)
         {
             return;
@@ -100,10 +99,9 @@ public class AntiBlowtorchPlugin : RocketPlugin<AntiBlowtorchConfiguration>
             return;
         }
 
-        int instanceId = structure.model.GetInstanceID();
         DateTime now = DateTime.UtcNow;
 
-        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.Transform == transform);
+        DamagedStructure damagedStructure = DamagedStructures.FirstOrDefault(ds => ds.Transform == structure.model);
         if (damagedStructure == null)
         {
             return;
