@@ -21,7 +21,7 @@ Prevent players from repairing or salvaging structures while being raided.
 - `MessageColor` - The color of the chat messages sent by the plugin.
 - `MessageIconUrl` - The icon of the chat messages sent by the plugin.
 - `BlockTimeSeconds` - The time in seconds that the structure will be blocked from being repaired or salvaged after being damaged.
-- `MessageThrottleTimeSeconds` - The time in seconds that the message will be sent again to the player. For example when the player uses blowtorch on the structure, without a throttle time the message will be sent multiple times and spam the player.
+- `MessageThrottleTimeSeconds` - The time in seconds that the message will be sent again to the player. For example when the player uses blowtorch on the structure, without a throttle time the message would be sent multiple times and spam the player.
 - `IgnoreOwnerAndGroup` - If set to `true`, the plugin will ignore the owner and group of the structure and block the repair or salvage action regardless of who damaged the structure.
 
 ## Translations
